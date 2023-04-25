@@ -1,0 +1,1509 @@
+# Saša Jurić - Parsing from first principles - WebCamp Zagreb 2019
+
+## Section
+
+This the code Saša Jurić types out in [this presentation](https://www.youtube.com/watch?v=xNzoerDljjo) which is implementing the Parser Combinator pattern in Elixir.
+
+<!-- livebook:{"break_markdown":true} -->
+
+[13:00 or so](https://youtu.be/xNzoerDljjo?t=783)
+
+```elixir
+defmodule SqlParser0 do
+  def run do
+    input = "select foo from bar"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    :ok
+  end
+end
+```
+
+```elixir
+SqlParser0.run()
+```
+
+[15:45 or so](https://youtu.be/xNzoerDljjo?t=945)
+
+```elixir
+defmodule SqlParser1 do
+  def run do
+    input = "select foo from bar"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    char(input)
+  end
+
+  defp char(input) do
+    case input do
+      "" -> {:error, "unexpected end of input"}
+      <<char::utf8, rest::binary>> -> {:ok, char, rest}
+    end
+  end
+end
+```
+
+```elixir
+SqlParser1.run()
+```
+
+[17:00 or so](https://youtu.be/xNzoerDljjo?t=945)
+
+```elixir
+defmodule SqlParser2 do
+  def run do
+    input = "select foo from bar"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = char()
+    parser.(input)
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser2.run()
+```
+
+[18:30 or so](https://youtu.be/xNzoerDljjo?t=1110)
+
+```elixir
+defmodule SqlParser3 do
+  def run do
+    input = "5select foo from bar"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = satisfy(char(), fn char -> char in ?0..?9 end)
+    parser.(input)
+  end
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser3.run()
+```
+
+[21:00 or so](https://youtu.be/xNzoerDljjo?t=1300)
+
+```elixir
+defmodule SqlParser4 do
+  def run do
+    input = "select foo from bar"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = ascii_letter()
+    parser.(input)
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser4.run()
+```
+
+[22:30 or so](https://youtu.be/xNzoerDljjo?t=1390)
+
+```elixir
+defmodule SqlParser5 do
+  def run do
+    input = "_select foo from bar"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = char(?_)
+    parser.(input)
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser5.run()
+```
+
+[24:00 or so](https://youtu.be/xNzoerDljjo?t=1440)
+
+```elixir
+defmodule SqlParser6 do
+  def run do
+    input = "foo_1 bar_2"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = choice([ascii_letter(), char(?_), digit()])
+    parser.(input)
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser6.run()
+```
+
+[26:00 or so](https://youtu.be/xNzoerDljjo?t=1560)
+
+```elixir
+defmodule SqlParser7 do
+  def run do
+    input = "foo_1 bar_2"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = indentifier_char()
+    parser.(input)
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+[26:30 or so](https://youtu.be/xNzoerDljjo?t=1590)
+
+```elixir
+defmodule SqlParser8 do
+  def run do
+    input = "foo_1 bar_2"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = many(indentifier_char())
+    parser.(input)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser8.run()
+```
+
+[29:00 or so](https://youtu.be/xNzoerDljjo?t=1740)
+
+```elixir
+defmodule SqlParser9 do
+  def run do
+    input = "foo_1 bar_2"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = identifier()
+    parser.(input)
+  end
+
+  defp identifier, do: many(indentifier_char())
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser9.run()
+```
+
+[29:30 or so](https://youtu.be/xNzoerDljjo?t=1770)
+
+```elixir
+defmodule SqlParser10 do
+  def run do
+    input = "foo_1 bar_2"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = map(identifier(), fn chars -> to_string(chars) end)
+    parser.(input)
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    satisfy(many(indentifier_char()), fn chars -> chars != [] end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser10.run()
+```
+
+[33:00 or so](https://youtu.be/xNzoerDljjo?t=1970)
+
+```elixir
+defmodule SqlParser11 do
+  def run do
+    input = "foo_1 bar_2"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = identifier()
+    parser.(input)
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser11.run()
+```
+
+[35:15 or so](https://youtu.be/xNzoerDljjo?t=2115)
+
+```elixir
+defmodule SqlParser12 do
+  def run do
+    input = "A_1"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = sequence([ascii_letter(), char(?_), digit()])
+    parser.(input)
+  end
+
+  defp sequence(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:ok, [], input}
+
+        [first_parser | other_parsers] ->
+          with {:ok, first_term, rest} <- first_parser.(input),
+               {:ok, other_terms, rest} <- sequence(other_parsers).(rest),
+               do: {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser12.run()
+```
+
+[37:30 or so](https://youtu.be/xNzoerDljjo?t=2250)
+
+```elixir
+defmodule SqlParser13 do
+  def run do
+    input = "
+    
+    foo_1 
+    
+    
+    bar_2
+    
+    "
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = token(identifier)
+    # Second step @ 40:00 |> many()
+    parser.(input)
+  end
+
+  defp token(parser) do
+    sequence([
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      ),
+      parser,
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      )
+    ])
+    |> map(fn [_leading_whitespace, term, _trailing_whitespace] -> term end)
+  end
+
+  defp sequence(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:ok, [], input}
+
+        [first_parser | other_parsers] ->
+          with {:ok, first_term, rest} <- first_parser.(input),
+               {:ok, other_terms, rest} <- sequence(other_parsers).(rest),
+               do: {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser13.run()
+```
+
+[40:30 or so](https://youtu.be/xNzoerDljjo?t=2430)
+
+```elixir
+defmodule SqlParser14 do
+  def run do
+    input = "col1
+    
+    ,
+    
+    col2,col3    col4"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = separated_list(token(identifier), token(char(?,)))
+    # Second step @ 40:00 |> many()
+    parser.(input)
+  end
+
+  defp separated_list(element_parser, separator_parser) do
+    sequence([
+      element_parser,
+      many(
+        sequence([
+          separator_parser,
+          element_parser
+        ])
+      )
+    ])
+    |> map(fn [first_element, rest] ->
+      other_elements = Enum.map(rest, fn [_comma, element] -> element end)
+      [first_element | other_elements]
+    end)
+  end
+
+  defp token(parser) do
+    sequence([
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      ),
+      parser,
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      )
+    ])
+    |> map(fn [_leading_whitespace, term, _trailing_whitespace] -> term end)
+  end
+
+  defp sequence(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:ok, [], input}
+
+        [first_parser | other_parsers] ->
+          with {:ok, first_term, rest} <- first_parser.(input),
+               {:ok, other_terms, rest} <- sequence(other_parsers).(rest),
+               do: {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser14.run()
+```
+
+[43:50 or so](https://youtu.be/xNzoerDljjo?t=2630)
+
+```elixir
+defmodule SqlParser15 do
+  def run do
+    input = " seleCt col1
+    
+    ,
+    
+    col2,col3    from some_table"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = keyword(:select)
+    # Second step @ 40:00 |> many()
+    parser.(input)
+  end
+
+  defp keyword(expected) do
+    identifier()
+    |> token()
+    |> satisfy(fn identifier ->
+      String.upcase(identifier) == String.upcase(to_string(expected))
+    end)
+    |> map(fn _identifier -> expected end)
+  end
+
+  defp columns, do: separated_list(token(identifier), token(char(?,)))
+
+  defp separated_list(element_parser, separator_parser) do
+    sequence([
+      element_parser,
+      many(
+        sequence([
+          separator_parser,
+          element_parser
+        ])
+      )
+    ])
+    |> map(fn [first_element, rest] ->
+      other_elements = Enum.map(rest, fn [_comma, element] -> element end)
+      [first_element | other_elements]
+    end)
+  end
+
+  defp token(parser) do
+    sequence([
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      ),
+      parser,
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      )
+    ])
+    |> map(fn [_leading_whitespace, term, _trailing_whitespace] -> term end)
+  end
+
+  defp sequence(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:ok, [], input}
+
+        [first_parser | other_parsers] ->
+          with {:ok, first_term, rest} <- first_parser.(input),
+               {:ok, other_terms, rest} <- sequence(other_parsers).(rest),
+               do: {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser15.run()
+```
+
+[45:40 or so](https://youtu.be/xNzoerDljjo?t=2740)
+
+```elixir
+defmodule SqlParser16 do
+  def run do
+    input = " seleCt col1
+    
+    ,
+    
+    col2,col3    from some_table"
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = select_statement()
+    # Second step @ 40:00 |> many()
+    parser.(input)
+  end
+
+  defp select_statement do
+    sequence([
+      keyword(:select),
+      columns(),
+      keyword(:from),
+      token(identifier())
+    ])
+    |> map(fn [:select, columns, :from, from] ->
+      %{statement: :select, columns: columns, from: from}
+    end)
+  end
+
+  defp keyword(expected) do
+    identifier()
+    |> token()
+    |> satisfy(fn identifier ->
+      String.upcase(identifier) == String.upcase(to_string(expected))
+    end)
+    |> map(fn _identifier -> expected end)
+  end
+
+  defp columns, do: separated_list(token(identifier), token(char(?,)))
+
+  defp separated_list(element_parser, separator_parser) do
+    sequence([
+      element_parser,
+      many(
+        sequence([
+          separator_parser,
+          element_parser
+        ])
+      )
+    ])
+    |> map(fn [first_element, rest] ->
+      other_elements = Enum.map(rest, fn [_comma, element] -> element end)
+      [first_element | other_elements]
+    end)
+  end
+
+  defp token(parser) do
+    sequence([
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      ),
+      parser,
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      )
+    ])
+    |> map(fn [_leading_whitespace, term, _trailing_whitespace] -> term end)
+  end
+
+  defp sequence(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:ok, [], input}
+
+        [first_parser | other_parsers] ->
+          with {:ok, first_term, rest} <- first_parser.(input),
+               {:ok, other_terms, rest} <- sequence(other_parsers).(rest),
+               do: {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser16.run()
+```
+
+[48:30 or so](https://youtu.be/xNzoerDljjo?t=2910)
+
+```elixir
+defmodule SqlParser17 do
+  def run do
+    input = " select col1 from (
+      select col2, col3 from(
+        select col4, col5, col6 from some_table
+      )
+    )
+    "
+    IO.puts("input: #{inspect(input)}\n")
+
+    parse(input)
+  end
+
+  defp parse(input) do
+    parser = select_statement()
+    # Second step @ 40:00 |> many()
+    parser.(input)
+  end
+
+  defp select_statement do
+    sequence([
+      keyword(:select),
+      columns(),
+      keyword(:from),
+      choice([token(identifier()), subquery()])
+    ])
+    |> map(fn [:select, columns, :from, from] ->
+      %{statement: :select, columns: columns, from: from}
+    end)
+  end
+
+  defp subquery do
+    sequence([
+      token(char(?()),
+      lazy(fn -> select_statement() end),
+      token(char(?)))
+    ])
+    |> map(fn [?(, statement, ?)] -> statement end)
+  end
+
+  defp lazy(combinator) do
+    fn input ->
+      parser = combinator.()
+      parser.(input)
+    end
+  end
+
+  defp keyword(expected) do
+    identifier()
+    |> token()
+    |> satisfy(fn identifier ->
+      String.upcase(identifier) == String.upcase(to_string(expected))
+    end)
+    |> map(fn _identifier -> expected end)
+  end
+
+  defp columns, do: separated_list(token(identifier), token(char(?,)))
+
+  defp separated_list(element_parser, separator_parser) do
+    sequence([
+      element_parser,
+      many(
+        sequence([
+          separator_parser,
+          element_parser
+        ])
+      )
+    ])
+    |> map(fn [first_element, rest] ->
+      other_elements = Enum.map(rest, fn [_comma, element] -> element end)
+      [first_element | other_elements]
+    end)
+  end
+
+  defp token(parser) do
+    sequence([
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      ),
+      parser,
+      many(
+        choice([
+          char(?\s),
+          char(?\n),
+          char(?\r),
+          char(?\t)
+        ])
+      )
+    ])
+    |> map(fn [_leading_whitespace, term, _trailing_whitespace] -> term end)
+  end
+
+  defp sequence(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:ok, [], input}
+
+        [first_parser | other_parsers] ->
+          with {:ok, first_term, rest} <- first_parser.(input),
+               {:ok, other_terms, rest} <- sequence(other_parsers).(rest),
+               do: {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp map(parser, mapper) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input), do: {:ok, mapper.(term), rest}
+    end
+  end
+
+  defp identifier do
+    indentifier_char()
+    |> many()
+    |> satisfy(fn chars -> chars != [] end)
+    |> map(fn chars -> to_string(chars) end)
+  end
+
+  defp many(parser) do
+    fn input ->
+      case parser.(input) do
+        {:error, _reason} ->
+          {:ok, [], input}
+
+        {:ok, first_term, rest} ->
+          {:ok, other_terms, rest} = many(parser).(rest)
+          {:ok, [first_term | other_terms], rest}
+      end
+    end
+  end
+
+  defp indentifier_char do
+    choice([ascii_letter(), char(?_), digit()])
+  end
+
+  defp choice(parsers) do
+    fn input ->
+      case parsers do
+        [] ->
+          {:error, "no parser succeeded"}
+
+        [first_parser | other_parsers] ->
+          with {:error, _reason} <- first_parser.(input), do: choice(other_parsers).(input)
+      end
+    end
+  end
+
+  defp digit, do: satisfy(char(), fn char -> char in ?0..?9 end)
+  defp ascii_letter, do: satisfy(char(), fn char -> char in ?A..?Z or char in ?a..?z end)
+  defp char(expected), do: satisfy(char(), fn char -> char == expected end)
+
+  defp satisfy(parser, acceptor) do
+    fn input ->
+      with {:ok, term, rest} <- parser.(input) do
+        if acceptor.(term), do: {:ok, term, rest}, else: {:error, "term rejected"}
+      end
+    end
+  end
+
+  defp char() do
+    fn input ->
+      case input do
+        "" -> {:error, "unexpected end of input"}
+        <<char::utf8, rest::binary>> -> {:ok, char, rest}
+      end
+    end
+  end
+end
+```
+
+```elixir
+SqlParser17.run()
+```
